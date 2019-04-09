@@ -350,7 +350,7 @@ cat("long bond weight is ", w_bond,"\n")
 
 5. 
 
-Choose long call option and short bond with strike price range from 25 to 75
+Choose long call option and short bond with strike price range from 25 to 80
 
 ```{r}
 r <- 0.02
@@ -400,6 +400,55 @@ abline(v=74,col="red")
 As the strike price increases, the call is out of the money hence become less expensive, thus the weights on the call option and bond decrases accrodingly as the strike price increases. 
 
 I would choose strike price = 74 to obtain a optimal portfolio based on the graph.
+
+Choose write short option and long bond with strike price range from 25 to 80
+
+```{r}
+r <- 0.02
+t <- 0.25
+s0 <- 50
+mu <- 0.07
+sigma <- 0.16
+x <- 50
+nPath <- 5000
+nSims <- 10
+delta <- (10/252)/nSims
+strikePrice <- seq(30,80,1)
+w_option <- c()
+w_bond <- c()
+expected_ret <- c()
+totalCap <- 100
+
+# for call
+for(i in strikePrice){
+  putPrice <- bsPricePut(r, sigma, t, s0, i)
+  stock_price <- GeneratePricePath(nPath, nSims, s0, mu, sigma, delta)
+  stock_price_t <- bsPricePut(r, sigma, t -(10/252), stock_price[,11], i)
+  VaR_Put <-  abs(quantile(stock_price_t, 0.99) - putPrice)
+  
+  num_option <- totalCap/VaR_Put
+    
+  shortPosOption <- -num_option * putPrice 
+  longPosBond <-  totalCap - shortPosOption
+  
+  w_option <- rbind(w_option,shortPosOption/totalCap)
+  w_bond <- rbind(w_bond, longPosBond/totalCap)
+  
+  putPriceAfter10d <- mean(stock_price_t)
+  
+  ret <- (-num_option * putPriceAfter10d - shortPosOption + longPosBond * r * (10/252))/totalCap
+  expected_ret <- rbind(expected_ret, ret)
+}
+
+plot(x= strikePrice, y = w_bond, col="red", type ="l", ylab="Bond Weights",ylim = c(-10,10), main = "Optimal Portfolio with Write Put Option and Long Bond")
+lines(x= strikePrice, y = w_option, col="blue",type = "l")
+legend("topleft", c("Bond weights", "Put weights"), col=c("red", "blue"), lwd=10)
+
+plot(x= strikePrice, y = expected_ret ,col="blue", type ="l", ylab="Expected Return", main = "Expected Return vs strike")
+
+```
+
+As observed, the return is lowest at 35. As strike increases, the return slowly increases and increase rate close to 0 at strike = 60
 
 6. 
 
