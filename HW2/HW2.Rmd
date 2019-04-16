@@ -1,0 +1,369 @@
+---
+header-includes:
+- \usepackage{amssymb, amsmath, amsthm}
+- \usepackage{tabu}
+- \newcommand{\E}{\mathbb{E}}
+- \newcommand{\var}{{\rm Var}}
+- \newcommand{\N}{\mathcal{N}}
+output: pdf_document
+---
+
+\noindent \begin{tabu} to \textwidth {@{}X[4 l] @{}X[r]}
+  \textbf{HW 2}           & \\ 
+  \textbf{MFE 409: Financial Risk Measurement and Management}   & \\ 
+  \textbf{Professor Valentin Haddad}         & \\
+  \textbf{Group 9}         & \\
+  \textbf{Students: Xiahao Wang, Haoxuan Tong, Yuhua Deng, Nupur Solanki}
+\end{tabu}
+
+
+## Qn1
+
+1.
+
+### Technique used to compute VaR
+The model is based on changes in the market over the previous 260 days with confidence level of 99%
+  * The incorporation of typical risk factors interest rates credit spreads exchange rates securities prices commodities prices and the corresponding volatility.
+  
+  * The incorporation of correlations between risk factors in order to account for the knock-on
+effects of risk diversification.
+
+### What data is used to compuate VaR? Is more recent data weighted more heavily?
+In the report, the market risk identified includes:
+  * Interest rate risk
+  * Currency risk
+  * Price risk
+  * Credit spread risk
+  * Options (intrinsic volatility and correlation risk)
+  
+The data mainly comes from Fixed income and equities team. 
+
+### Time horizon
+10 days
+
+### Confidence level
+99%
+
+### Number of VaR exceptions in 2008
+Daily losses exceeded VaR 7 times in 2008 reflecting unprecedented shocks and exceptionally high
+volatility in the financial markets.
+
+### Any changes to VaR methodology made as a result of the financial crisis?
+In response to the exreme volatility in the financial markets, the firm started to test the accuracy of its model through variety of techniques including regular comparison over long-term horizon between actual daily losses on capital market transactions and 1-day VaR at 99%
+
+
+2.
+
+(a)
+
+Plot the Daily Stock Return and VaR. I use expanding window as the way to calculate the daily VaR
+
+```{r}
+suppressMessages(library(data.table))
+suppressMessages(library(ggplot2))
+suppressMessages(library(foreign))
+suppressMessages(library(lubridate))
+suppressMessages(library(quantmod))
+suppressMessages(library(knitr))
+
+rm(list=ls())
+# Download data and set as data.table from quantmode 
+suppressMessages(BNPQY <- getSymbols("BNPQY",auto.assign = FALSE,from='2006-01-01',to='2008-12-31'))
+BNPQY <- as.data.table(BNPQY)
+
+# find the daily return
+BNPRet_all <- BNPQY[, Ret:=c(NA,diff(log(BNPQY.Adjusted)))][-1,]
+
+# subset stock in 2008
+BNPRet_08 <-BNPRet_all[index >= "2008-01-01"]
+
+calculateDailyVaR <- function(Ret_08, Ret_all, c){
+  # initialize daily VaR Dataframe
+  dailyVaDTr <- data.frame(Date= as.Date(character()),VaR = double())
+  
+  for( i in Ret_08$index){
+    historical_price <- Ret_all[index < as.Date(i)]
+    var <- quantile(historical_price$Ret, 1-c)
+    dailyVaDTr <- rbind(dailyVaDTr, c(as.Date(i), as.double(var)))
+  }
+  return(dailyVaDTr)
+}
+
+# set c
+c <- 0.99
+
+dailyVaDTr <- calculateDailyVaR(BNPRet_08, BNPRet_all,c)
+
+colnames(dailyVaDTr) <- c("index", "Daily_VaR")
+dailyVaDTr$index <- as.Date(dailyVaDTr$index)
+
+BNPRet_08 <- as.data.frame(BNPRet_08)
+BNPRet_08$DailyVar <- dailyVaDTr$Daily_VaR
+ggplot(BNPRet_08, aes(index)) + geom_line(aes(y = Ret), color="blue") + geom_line(aes(y = DailyVar), color="red") + ggtitle("BNP Paribus 2008 Returns with VaR line")
+```
+
+(b)
+
+We can back test the strategy by counting the number of times the returns have gone less than the daily VaR over 2008
+
+```{r}
+count <- length(BNPRet_08$Ret) - sum(BNPRet_08$Ret > BNPRet_08$DailyVar)
+cat("In 2008, the total number of times that return has gone below the daily VaR is ", count)
+```
+
+For large n, we run the chisquare test shown in the notes.
+
+```{r}
+m <- count
+n <- length(BNPRet_08$Ret)
+testVal <- -2 * log((c^(n-m)) * ((1-c)^m)) + 2 * log(((1 - m/n)^(n-m)) * ((m/n)^m))
+chisqVal <- qchisq(p=0.95, df=1)
+cat("Test Value is: ", testVal,"\n")
+cat("Chisquare value is: ", chisqVal,"\n")
+```
+
+Hence we reject the null that the VaR is set properly at 99%. Intuitively, this could be due to the financial crisis where the daily return frequently went below VaR.
+
+(c)
+
+In this case, we found 21 exception for the return of BNP stock whereas only 7 exceptions were reported in the annual report. This could be due to the change of BNP's risk measure so that less exceptions were reported.
+
+
+3.
+
+(a) 
+
+To get portfolio returns:
+
+step 1: find the daily return for all stocks
+step 2: multiply by the corrresponding amount to get the gain/loss for each period
+step 3: sum by the gain/loss for all stocks at each period to obtain the weighted portfolio gain/loss
+
+Also, Use the same method to calculate the VaR for the weighted portfolio in 2008. 
+
+The following diagram shows the daily VaR in 2008 for the portfolio.
+
+```{r}
+# Get stock data from quantmod
+symbols <- c("GS", "UBS", "JPM", "C", "BCS", "MS", "DB", "BAC", "BNPQY", "CS")
+suppressMessages(getSymbols(symbols,auto.assign = TRUE,from='2006-01-01',to='2008-12-31'))
+
+# combined all Adjusted Prices
+allAdjPrice <- data.frame(GS$GS.Adjusted, UBS$UBS.Adjusted, JPM$JPM.Adjusted, C$C.Adjusted, BCS$BCS.Adjusted, MS$MS.Adjusted, DB$DB.Adjusted, BAC$BAC.Adjusted, BNPQY$BNPQY.Adjusted, CS$CS.Adjusted)
+
+# get all daily return
+allRet <- apply(allAdjPrice, 2, function(x){
+  diff(log(x))
+})
+
+# starting with 1 or 2 mill, find the portfolio return (in mil)
+totalAmount <- c(1,2,1,2,1,2,1,2,1,2)
+
+baseLineRet <- totalAmount * allRet
+
+# portfolio return from 2006 to 2008
+baseLineRet <- data.table(
+  index = rownames(baseLineRet),
+  Ret = apply(baseLineRet, 1, function(x){ sum(x)})
+)
+
+# portfolio return in 2008
+baseLineRet_08 <- baseLineRet[baseLineRet$index >= "2008-01-01"]
+
+# set c
+c <- 0.99
+
+# calculate daily VaR
+dailyVaDTr <- calculateDailyVaR(baseLineRet_08, baseLineRet, c)
+colnames(dailyVaDTr) <- c("index", "Daily_VaR")
+
+# convert index to dates
+dailyVaDTr$index <- as.Date(dailyVaDTr$index)
+
+baseLineRet_08$dailyVaR <-dailyVaDTr$Daily_VaR
+baseLineRet_08$index <- as.Date(baseLineRet_08$index )
+
+ggplot(baseLineRet_08, aes(x = index)) + geom_line(aes(y = Ret), color="blue") + geom_line(aes(y = dailyVaR), color="red") + ggtitle("Weighted Portfolio 2008 Returns (in millions) with VaR line")
+```
+
+To calcualate the portfolio VaR, we experiment on two dataset:
+  1. Daily Return of portfolio from 2006 to 2008 
+  2. Daily Return of portfolio in 2008 
+  
+The idea is to see the impact on VaR in response to longer horizon and the financial crisis.
+
+If We consider the the portfolio VaR to be the 1% quantile of all returns from 2006 to 2008
+
+```{r}
+cat("Portfolio VaR is: ", abs(quantile(baseLineRet$Ret, 0.01))," mils")
+```
+
+If We consider the the portfolio VaR to be the 1% quantile of all returns from just in 2008
+```{r}
+cat("Portfolio VaR is: ", abs(quantile(baseLineRet_08$Ret, 0.01))," mils")
+```
+
+This may be due to the financial crisis where the banks suffer a lot of huge losses (negative shocks to the stock prices)
+
+
+(b)
+
+Increment of the weight by $1 for each firm and calculate the DVaR and CVaR.
+
+DVaR is obtained by the change in portfolio return divided by the change in weight.
+
+CVaR is the product of DVaR and the corresponding weights
+
+Code and summary below:
+
+```{r}
+DVaR <- c()
+DVaR_08 <- c()
+for(i in 1:10){
+  totalAmount <- c(1,2,1,2,1,2,1,2,1,2)
+  totalAmount[i] <- totalAmount[i] + (1/1000000)
+  portVal <- totalAmount * allRet
+  
+  portVal = data.table(
+  index = rownames(allRet),
+  Ret = apply(portVal, 1, function(x){ sum(x)})
+  )
+  # finding DVaR based on data in 2008
+  portVal_08 <- portVal[portVal$index >= "2008-01-01"]
+  DVaR_i_08 <- (abs(quantile(portVal_08$Ret, 0.01)) - abs(quantile(baseLineRet_08$Ret, 0.01)))/ (1/1000000)
+  DVaR_08 <- rbind(DVaR_08, as.numeric(DVaR_i_08))
+  
+  # finding DVaR based on data from 2006 to 2008
+  DVaR_i <- (abs(quantile(portVal$Ret, 0.01)) - abs(quantile(baseLineRet$Ret, 0.01)))/ (1/1000000)
+  DVaR <- rbind(DVaR, as.numeric(DVaR_i))
+}
+
+totalAmount <- c(1,2,1,2,1,2,1,2,1,2)
+CVaR <- DVaR * totalAmount
+CVaR_08 <- DVaR_08 * totalAmount
+
+
+```
+
+
+DVaR and CVaR using data from 2006 to 2008:
+
+```{r}
+summary <- cbind(DVaR, CVaR)
+colnames(summary) <- c("DVaR", "CVaR")
+rownames(summary)<- c("GS","UBS", "JPM", "C", "BCS", "MS", "DB", "BAC", "BNPQY", "CS")
+kable(summary,col.names = c("DVaR","CVaR"),caption = "DVaR and CVaR using data from 2006 to 2008")
+```
+
+DVaR and CVaR using data in 2008
+
+```{r}
+summary_08 <- cbind(DVaR_08, CVaR_08)
+colnames(summary_08) <- c("DVaR_08", "CVaR_08")
+rownames(summary_08)<- c("GS","UBS", "JPM", "C", "BCS", "MS", "DB", "BAC", "BNPQY", "CS")
+kable(summary_08,col.names = c("DVaR","CVaR"),caption = "DVaR and CVaR using data in 2008")
+```
+
+
+(c)
+
+CVaR shows how much each bank has an impact on the overall portfolio VaR. The result shows that Morgan Stanley has the highest and second highest impact on the portfolio VaR from both datasets. Credit Sussie has the highest impact of portfolio VaR in 2008.
+This could mean that its worth putting more weights for Morgan Stanley and Credit Sussie in a crisis. However, we also need to factor in the profits that each bank is making to get a better answer. We shall address this in terms of RAROC in the next part.
+
+This is confirmed by the sum of CVaR, which is 1.891332 mils and 2.364828 mils, which is equal to the portfolio VaR correspondingly
+
+```{r}
+# sum of CVaR using data from 2006 to 2008
+sum(summary[,2])
+```
+
+
+```{r}
+# sum of CVaR using data in 2008
+sum(summary_08[,2])
+```
+
+(d)
+
+We can use RAROC (Risk Adjusted Rate of Return on Capital)
+To get the profit, we use the mean of the portfolio return from 2006 to 2008 or portfolio return in 2008 based on the same weights given in the previous questions.
+
+Using portfolio return in 2008 to determine profit:
+
+```{r} 
+allRet_08 <- allRet[rownames(allRet) >= "2008-01-01",]
+profits_08 <- apply(allRet_08,2,mean) * totalAmount
+raroc_08 <- profits_08/CVaR_08
+colnames(raroc_08) <- c("RAROC_08")
+rownames(raroc_08)<- c("GS","UBS", "JPM", "C", "BCS", "MS", "DB", "BAC", "BNPQY", "CS")
+raroc_08
+```
+
+Based on the result, we should be overweighting J.P. Morgan in the crisis as it has the biggest RAROC value.
+
+Using portfolio return from 2006 to 2008 to determine profit:
+
+```{r}
+profits <- apply(allRet,2,mean) * totalAmount
+raroc <- profits/CVaR
+colnames(raroc) <- c("RAROC")
+rownames(raroc)<- c("GS","UBS", "JPM", "C", "BCS", "MS", "DB", "BAC", "BNPQY", "CS")
+raroc
+```
+In this case for a long horizon, we should be overweighting Goldman, BNP credit Suisse.
+
+
+##Qn2 Expected Shortfall
+
+1.
+Gain is $X \sim N(\mu, \sigma)$, Hence $X = \mu + \sigma Z$ where $Z \sim N(0,1)$
+
+$$Prob(X \leq VaR_c(X)) = 1 -c $$
+Hence $$ =\Phi(1-c)\sigma + \mu$$ 
+
+where $\Phi(\cdot)$ is the cummulative function of standard normal distribution
+
+From lecture notes we know that $VaR =- (\mu + \Phi^{-1}(1-c)\sigma)$ for loss 
+
+The expected shortfall in terms of VaR is:
+
+$$ES = \frac{1}{1-c}\int^1_c-(\mu + \Phi^{-1}(1- \alpha )\sigma)d\alpha$$
+$$= -\frac{1}{1-c}\int^1_c\Phi^{-1}(1- \alpha )\sigma d\alpha - \mu $$
+Let $\alpha = \Phi(y)$ then $d\alpha = \phi(y)dy$ where $\phi(y)$ is the pdf of standard normal distribution 
+
+Hence the upper bound now is $\Phi^{-1}(1)$ which is $\infty$. Substitute $\Phi(y)$ for $\alpha$ :
+
+$$\int^1_c\Phi^{-1}(1- \alpha)\sigma d\alpha$$
+$$=\int^{\infty}_{\Phi^{-1}(c)}\Phi^{-1}(\Phi(-y))\sigma \phi(y)dy $$
+$$ =\int^{\infty}_{\Phi^{-1}(c)}-y\sigma \phi(y)dy $$
+$$=\int^{\infty}_{\Phi^{-1}(c)}-\frac{y\sigma}{\sqrt{2\pi}} e^{-\frac{y ^2}{2}} dy$$
+Integrate to get:
+$$= -\frac{\sigma}{\sqrt{2\pi}} e^{-\frac{z(c)^2}{2}}$$
+Put it back the expected shortfall equation:
+
+$$ES = -\frac{1}{1-c}(-\frac{\sigma}{\sqrt{2\pi}} e^{-\frac{z(c)^2}{2}} ) - \mu$$
+$$ = -\mu +\frac{\sigma}{\sqrt{2\pi}(1-c)} e^{-\frac{z(c)^2}{2}} )$$
+
+2. 
+General formula:
+
+$$ES = W_0 - \frac{\int^{W_0-VaR}_{-\infty}Wf(W)dW}{\int^{W_0-VaR}_{-\infty}f(W)dW}$$
+
+We need to solve the integration in the numerator, denominator is just 1-c
+
+Let $\alpha = F(W)$, then $d\alpha = f(W)dW$, $F(W_0 -VaR) = 1 - c$, then $F^{-1}(1-c)= W_0 - VaR$
+
+also change the upper and lower bound of the integration:
+
+$$\int^{W_0-VaR}_{-\infty}f(W)dW =\int^{\infty}_{W_0+VaR}Wf(W)dW$$
+$$=\int^{\infty}_{W_0+VaR}Wf(W)dW =\int^{F^{-1}(1)}_{F^{-1}(c)}Wf(W)dW$$
+Where $F^{-1}(1-c)= W_0 - VaR = F^{-1}(c)= W_0 + VaR$
+
+$$ \int^{F^{-1}(1)}_{F^{-1}(c)}Wd\alpha = \int^{1}_{c}Wd\alpha $$
+$$  = \int^{1}_{c}Wd\alpha  = \int^{1}_{c}(W_0 - VaR_\alpha)d\alpha  $$
+$$= W_0(1 - c) - \int^{1}_{c} VaR_\alpha d\alpha $$
+
+Bring it back into the expected shortfall equation
+
+$$ES = W_0 - \frac{W_0(1 - c) - \int^{1}_{c} VaR_\alpha d\alpha}{1-c}$$
+$$ = \frac{ 1}{1-c}\int^{1}_{c} VaR_\alpha d\alpha$$
