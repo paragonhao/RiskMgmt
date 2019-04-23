@@ -29,6 +29,7 @@ suppressMessages(require(ggplot2))
 suppressMessages(require(dplyr))
 suppressMessages(require(moments))
 suppressMessages(library(knitr))
+suppressMessages(require(quantmod))
 
 rm(list=ls())
 returns_data <- as.data.table(read.csv("hw3_returns2.csv"))
@@ -245,7 +246,7 @@ lines(x= qn2exp$Date, y= qn2exp$bstrap_exp_UI, col = "green")
 
 legend("topright",legend=c("Lower Interval","Upper Interval"),fill=c("blue","green"), cex = 0.8)
 
-write.table(returns_data, file = "returns_data.csv", row.names=FALSE, sep=",")
+#write.table(returns_data, file = "returns_data.csv", row.names=FALSE, sep=",")
 ```
 
 
@@ -325,8 +326,93 @@ cat("Number of Exceptions using normalized return: ",
     sum(Q3_returns_data_2005[,normalized < exponentialWeightedVaR ]))
 ```
 
-Using exponential weighted on normalized return, 
+Using exponential weighted on normalized return, we get 8 exceptions, which is less than both historical and exponentail weight on in qn1.
 
+### 5 
+
+There are 748 data entries from 2015 to 2017. By taking 99% VaR on these observation, we should be seeing 8 exceptions. Hence I would suggest using the approach in part 4 (I called it normalized exponential weighted VaR) in this case.
+
+
+## Qn 2 
+
+### 1. 
+
+Consider this question as 8 balls and 3 drawers. In the worst case, there are 2 balls in each drawer. Hence, the whichever drawer the 7th ball is placed, the number of balls will be equal to 3.
+
+### 2.
+
+Assume it follows normal distribution
+
+$$VaR_{5} = \sigma_{5}\Phi^{-1}(0.98) = 10$$
+
+$$\sigma_{5} = 10/\Phi^{-1}(0.98) = 4.869144$$
+
+$$\sigma_{10} = \sigma_{5} \sqrt2$$
+
+Solve for:
+
+$$VaR_{10} = \sigma_{10}\Phi^{-1}(0.99)$$
+
+Hence 
+
+$$VaR_{10} = \sigma_5 \sqrt2 \Phi^{-1}(0.99) =  16.01925$$
+
+### 3. 
+
+Assume VaR = 0.99
+
+Prob(More than one exception) = 1 - Prob(No Exception + 1 Exception)
+
+$$ = 1 - \Sigma_{k=0}^1{\frac{20!}{k!(n-k)!}}(1-c)^kc^{n-k}$$
+where c = 0.99
+
+```{r}
+cat("Probability is:", 1- (pbinom(1,20, 0.01)))
+```
+
+#### Definition of bunching: 
+
+A bunching of exceptions refers clustering of exception. 
+
+We could require a test to determine if there is bunching in the exceptions.
+
+Set a threshold for punching, and use the binomial distribution to determine if the probability is higher than the threshold value. Say if the punching threshold is only 1 in a month and there are two exceptions. Then it is highly likely that punching exists.
+
+### 4.
+
+First Intuition is to use Lyft which IPOed recently as a comparative firm to do the analysis.
+However, as there are only 15 days, so this may not be a good measure due to short horizon.
+
+As I have observed, the sector or subsector which Lyft is in outperforms the company by a huge margin. Hence, using the sector or subsector return is not going to reflect the VaR for Uber. 
+
+Instead, I would look at IPO ETFs to determine the VaR. The intuition is that Uber's return may be similar to a lot of newly IPOs firms. I chose Renaissance IPO ETF, that have the most allocation of Lyft and similar tech firms.
+
+```{r}
+
+suppressMessages(getSymbols("IPO"))
+IPO <- as.data.table(IPO)
+
+IPO[, Return:= (IPO.Adjusted - shift(IPO.Adjusted)) /shift(IPO.Adjusted)]
+
+rollingWindow <- 251
+c <- 0.01
+
+# Using the stress VaR method since we didn't use in the early exercise
+# Rolling to get the 1% daily VaR first
+IPO[, VaR := rollapply(Return, rollingWindow, function(Return){
+        sorted_ret <- sort(Return)
+        cutoff <- ceiling(rollingWindow * c)
+        sorted_ret[cutoff]
+}, fill=NA, align="right")]
+
+# Rolling to get the min VaR
+IPO[, MinVaR := rollapply(Return, rollingWindow, function(Return){
+      min(Return,na.rm = T)
+},fill=NA, align="right")]
+
+
+cat("The number of the VaR: ", min(IPO$MinVaR,na.rm = T))
+```
 
 
 
