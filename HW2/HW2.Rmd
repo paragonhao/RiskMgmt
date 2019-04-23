@@ -30,16 +30,21 @@ effects of risk diversification.
 
 ### What data is used to compuate VaR? Is more recent data weighted more heavily?
 In the report, the market risk identified includes:
+  
   * Interest rate risk
+  
   * Currency risk
+  
   * Price risk
+  
   * Credit spread risk
+  
   * Options (intrinsic volatility and correlation risk)
   
 The data mainly comes from Fixed income and equities team. 
 
 ### Time horizon
-10 days
+previous 260 days and 10 days horizon
 
 ### Confidence level
 99%
@@ -136,7 +141,9 @@ In this case, we found 21 exception for the return of BNP stock whereas only 7 e
 To get portfolio returns:
 
 step 1: find the daily return for all stocks
+
 step 2: multiply by the corrresponding amount to get the gain/loss for each period
+
 step 3: sum by the gain/loss for all stocks at each period to obtain the weighted portfolio gain/loss
 
 Also, Use the same method to calculate the VaR for the weighted portfolio in 2008. 
