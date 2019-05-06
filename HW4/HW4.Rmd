@@ -1,0 +1,182 @@
+---
+header-includes:
+- \usepackage{amssymb, amsmath, amsthm}
+- \usepackage{tabu}
+- \newcommand{\E}{\mathbb{E}}
+- \newcommand{\var}{{\rm Var}}
+- \newcommand{\N}{\mathcal{N}}
+output: pdf_document
+---
+
+\noindent \begin{tabu} to \textwidth {@{}X[4 l] @{}X[r]}
+  \textbf{HW 4}           & \\ 
+  \textbf{MFE 409: Financial Risk Measurement and Management}   & \\ 
+  \textbf{Professor Valentin Haddad}         & \\
+  \textbf{Group 9}         & \\
+  \textbf{Students: Xiahao Wang, Haoxuan Tong, Yuhua Deng, Nupur Solanki}
+\end{tabu}
+
+
+## Qn1
+
+### 1.
+
+Calculate the Exponential Weighted Moving Average (EWMA)
+
+```{r}
+suppressMessages(require(data.table))
+suppressMessages(require(lubridate))
+suppressMessages(require(zoo))
+suppressMessages(require(rugarch))
+
+rm(list=ls())
+returns_data <- as.data.table(read.csv("hw3_returns2.csv"))
+returns_data[,Date:=mdy(Date)]
+
+# get volatility
+returns_data[, volatility := Return^2]
+returns_data[, volatility := cumsum(volatility)]
+returns_data[, observation := 1]
+returns_data[, observation := cumsum(observation)]
+returns_data[, volatility := volatility/observation]
+
+lambda <- 0.94
+
+returns_data[, one_minus_lambda := (1 - lambda)* (Return^2)]
+returns_data$ewma[1] <- returns_data$one_minus_lambda[1]
+
+size <- length(returns_data$ewma)
+
+for(i in 2:size){
+  returns_data$ewma[i] <- lambda * returns_data$ewma[i-1] +  returns_data$one_minus_lambda[i]
+}
+
+plot(x=returns_data$Date, y= returns_data$ewma, type="l", xlab = "Date", ylab="Volatility", main = "EWMA")
+returns_data[, observation := NULL]
+returns_data[, one_minus_lambda := NULL]
+```
+Next, find the VaR at 99% 
+The daily Value at Risk (VaR) is simply a function of the standard deviation or volatility and the desired confidence level. 
+
+Value at Risk (VAR) = sqrt(EWMA predicted Volatility) × z-value of standard normal cumulative distribution
+
+Calculate Daily VaR for both historical and exponential
+
+```{r}
+c <- 0.01
+z <- qnorm(0.01)
+returns_data[, VaR := sqrt(ewma) * z]
+
+rollingWindow <- 251
+
+cal_hist_VaR <- function(VaRs, c){
+  sorted_VaRs <- sort(VaRs)
+  Var_point <- ceiling(length(sorted_VaRs) * c)
+  var <- sorted_VaRs[Var_point]
+  return(var)
+}
+
+# calculating exponential VaR
+cal_exponential_VaR <- function(VaRs, c){
+  n <- length(VaRs)
+  weight <- lambda^seq((n-1), 0, -1) * (1-lambda)/(1-lambda^n)
+  df <- cbind(weight, VaRs)
+  df_sorted <- df[order(VaRs),]
+  df_sorted <- cbind(df_sorted, cumsum=cumsum(df_sorted[,1]))
+  pos <- which(df_sorted[,3]>c)[1]
+  return(df_sorted[pos,2])
+}
+
+
+# calculating historical VaR
+returns_data[, historicalVaR := shift(rollapply(returns_data$VaR, rollingWindow, function (VaRs){
+  return(cal_hist_VaR(VaRs,c))
+}, fill=NA, align="right"))
+]
+
+# calculating exponential Weighted VaR
+returns_data[, exponentialWeightedVaR := shift(rollapply(returns_data$VaR, rollingWindow, function(VaRs){
+  cal_exponential_VaR(VaRs, c)
+}, fill=NA, align="right"))]
+
+
+data_2005_onwards <- returns_data[Date >= "2015-01-01"]
+
+plot(x = data_2005_onwards$Date, y= data_2005_onwards$Return, type = "l", 
+     main="Stock Return against VaRs", xlab = "Date",
+     ylab= "Stock Return")
+lines(x= data_2005_onwards$Date, y= data_2005_onwards$historicalVaR, col = "blue")
+lines(x= data_2005_onwards$Date, y= data_2005_onwards$exponentialWeightedVaR, col = "green")
+legend("bottomright",legend=c("Historical","Exponential Weighted"),fill=c("blue","green"), cex = 0.8)
+
+historicalExcept <- sum(data_2005_onwards[,Return < historicalVaR ])
+exExcept <-sum(data_2005_onwards[,Return < exponentialWeightedVaR ])
+
+cat("There are", historicalExcept, "exceptions using the historical VaR while", exExcept, "using the exponential Weighted VaR")
+```
+
+### 2. 
+
+GARCH(1,1) formula:
+
+$$\sigma^2_t = \gamma V_L + \alpha R^2_{t-1} + \beta \sigma^2_{t-1}$$ 
+
+where $w =  \gamma V_L $
+
+It is EWMA + long-run average
+
+Using Built in Rugarch:
+
+```{r}
+library(rugarch)
+
+mymodel <- ugarchspec(variance.model = list(model = "fGARCH", submodel='GARCH', garchOrder = c(1, 1)), mean.model = list(armaOrder = c(0, 0), include.mean = F), 
+distribution.model = "norm")
+
+fitVal <- ugarchfit(data =returns_data$Return , spec = mymodel, method="BFGS")
+```
+
+Start with the optimal parameters
+
+```{r}
+omega <- as.double(fitVal@fit$coef[1])
+alpha1 <- as.double(fitVal@fit$coef[2])
+beta1 <- as.double(fitVal@fit$coef[3])
+
+# using the sigma from
+garchVol <-fitVal@fit$sigma
+
+returns_data <- cbind(returns_data, garchVol)
+
+returns_data[, GARCHVaR := garchVol * z]
+
+c <- 0.01
+rollingWindow <- 251
+# calculating historical VaR
+returns_data[, hVaRGarch := shift(rollapply(returns_data$GARCHVaR, rollingWindow, function (VaRs){
+  return(cal_hist_VaR(VaRs,c))
+}, fill=NA, align="right"))
+]
+
+# calculating exponential Weighted VaR
+returns_data[, ewVaRGarch := shift(rollapply(returns_data$GARCHVaR, rollingWindow, function(VaRs){
+  cal_exponential_VaR(VaRs, c)
+}, fill=NA, align="right"))]
+
+
+data_2005_onwards <- returns_data[Date >= "2015-01-01"]
+
+plot(x = data_2005_onwards$Date, y= data_2005_onwards$Return, type = "l", 
+     main="Stock Return against VaRs Garch (1,1)", xlab = "Date",
+     ylab= "Stock Return")
+lines(x= data_2005_onwards$Date, y= data_2005_onwards$hVaRGarch, col = "blue")
+lines(x= data_2005_onwards$Date, y= data_2005_onwards$ewVaRGarch, col = "green")
+legend("bottomright",legend=c("Historical","Exponential Weighted"),fill=c("blue","green"), cex = 0.8)
+
+historicalExcept <- sum(data_2005_onwards[,Return < hVaRGarch ])
+exExcept <-sum(data_2005_onwards[,Return < ewVaRGarch ])
+
+cat("There are", historicalExcept, "exceptions using the historical VaR while", exExcept, "using the exponential Weighted VaR")
+
+```
+
