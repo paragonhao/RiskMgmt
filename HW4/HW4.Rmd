@@ -245,7 +245,7 @@ cat("Using the VaR calculated from Pareto Distribution, the number of exceptions
 
 There are 748 data entries from 2015 to 2017. By taking 99% VaR on these observation, we should be seeing (748 * 0.01 = 7.48) 8 exceptions. By using the pareto distribution on the normalized return, we obtained 7 observations. 
 
-In the previous HW3, Is obtained 8 exceptions using historical and exponential weighting on normalized return. I would say that pareto distribution is as a good technique to estimate the VaR as the techniques we used in HW3.
+In the previous HW3, I obtained 8 exceptions using historical and exponential weighting on normalized return. I would say that pareto distribution is as a good technique to estimate the VaR as the techniques we used in HW3.
 
 
 
