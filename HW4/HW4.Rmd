@@ -19,7 +19,7 @@ output: pdf_document
 
 ## Qn1
 
-### 1.
+### 1.1
 
 Calculate the Exponential Weighted Moving Average (EWMA)
 
@@ -67,55 +67,22 @@ c <- 0.01
 z <- qnorm(0.01)
 returns_data[, VaR := sqrt(ewma) * z]
 
-rollingWindow <- 251
-
-cal_hist_VaR <- function(VaRs, c){
-  sorted_VaRs <- sort(VaRs)
-  Var_point <- ceiling(length(sorted_VaRs) * c)
-  var <- sorted_VaRs[Var_point]
-  return(var)
-}
-
-# calculating exponential VaR
-cal_exponential_VaR <- function(VaRs, c){
-  n <- length(VaRs)
-  weight <- lambda^seq((n-1), 0, -1) * (1-lambda)/(1-lambda^n)
-  df <- cbind(weight, VaRs)
-  df_sorted <- df[order(VaRs),]
-  df_sorted <- cbind(df_sorted, cumsum=cumsum(df_sorted[,1]))
-  pos <- which(df_sorted[,3]>c)[1]
-  return(df_sorted[pos,2])
-}
-
-
-# calculating historical VaR
-returns_data[, historicalVaR := shift(rollapply(returns_data$VaR, rollingWindow, function (VaRs){
-  return(cal_hist_VaR(VaRs,c))
-}, fill=NA, align="right"))
-]
-
-# calculating exponential Weighted VaR
-returns_data[, exponentialWeightedVaR := shift(rollapply(returns_data$VaR, rollingWindow, function(VaRs){
-  cal_exponential_VaR(VaRs, c)
-}, fill=NA, align="right"))]
-
-
 data_2005_onwards <- returns_data[Date >= "2015-01-01"]
 
 plot(x = data_2005_onwards$Date, y= data_2005_onwards$Return, type = "l", 
      main="Stock Return against VaRs", xlab = "Date",
      ylab= "Stock Return")
-lines(x= data_2005_onwards$Date, y= data_2005_onwards$historicalVaR, col = "blue")
-lines(x= data_2005_onwards$Date, y= data_2005_onwards$exponentialWeightedVaR, col = "green")
-legend("bottomright",legend=c("Historical","Exponential Weighted"),fill=c("blue","green"), cex = 0.8)
+lines(x= data_2005_onwards$Date, y= data_2005_onwards$VaR, col = "blue")
+legend("bottomright",legend=c("Return","VaR"),fill=c("black","blue"), cex = 0.8)
 
-historicalExcept <- sum(data_2005_onwards[,Return < historicalVaR ])
-exExcept <-sum(data_2005_onwards[,Return < exponentialWeightedVaR ])
-
-cat("There are", historicalExcept, "exceptions using the historical VaR while", exExcept, "using the exponential Weighted VaR")
+Exceptions <- sum(data_2005_onwards[,Return < VaR ])
+cat("There are", Exceptions, "exceptions with EWMA")
 ```
 
-### 2. 
+
+
+
+### 1.2 
 
 GARCH(1,1) formula:
 
@@ -143,6 +110,8 @@ omega <- as.double(fitVal@fit$coef[1])
 alpha1 <- as.double(fitVal@fit$coef[2])
 beta1 <- as.double(fitVal@fit$coef[3])
 
+cat("omega: ",omega,", alpha: ", alpha1, ", beta1: ", beta1, "\n")
+
 # using the sigma from
 garchVol <-fitVal@fit$sigma
 
@@ -150,33 +119,140 @@ returns_data <- cbind(returns_data, garchVol)
 
 returns_data[, GARCHVaR := garchVol * z]
 
-c <- 0.01
-rollingWindow <- 251
-# calculating historical VaR
-returns_data[, hVaRGarch := shift(rollapply(returns_data$GARCHVaR, rollingWindow, function (VaRs){
-  return(cal_hist_VaR(VaRs,c))
-}, fill=NA, align="right"))
-]
-
-# calculating exponential Weighted VaR
-returns_data[, ewVaRGarch := shift(rollapply(returns_data$GARCHVaR, rollingWindow, function(VaRs){
-  cal_exponential_VaR(VaRs, c)
-}, fill=NA, align="right"))]
-
-
 data_2005_onwards <- returns_data[Date >= "2015-01-01"]
 
 plot(x = data_2005_onwards$Date, y= data_2005_onwards$Return, type = "l", 
      main="Stock Return against VaRs Garch (1,1)", xlab = "Date",
      ylab= "Stock Return")
-lines(x= data_2005_onwards$Date, y= data_2005_onwards$hVaRGarch, col = "blue")
-lines(x= data_2005_onwards$Date, y= data_2005_onwards$ewVaRGarch, col = "green")
-legend("bottomright",legend=c("Historical","Exponential Weighted"),fill=c("blue","green"), cex = 0.8)
+lines(x= data_2005_onwards$Date, y= data_2005_onwards$GARCHVaR, col = "blue")
+legend("bottomright",legend=c("Return","VaR Weighted"),fill=c("black","blue"), cex = 0.8)
 
-historicalExcept <- sum(data_2005_onwards[,Return < hVaRGarch ])
-exExcept <-sum(data_2005_onwards[,Return < ewVaRGarch ])
-
-cat("There are", historicalExcept, "exceptions using the historical VaR while", exExcept, "using the exponential Weighted VaR")
-
+Except <- sum(data_2005_onwards[,Return < GARCHVaR ])
+cat("There are", Except, "exceptions with Garch(1,1)")
 ```
+
+
+
+
+### 1.3 
+Rerun the code from HW3 to get normalized return
+
+```{r}
+rm(list=ls())
+# from
+Q3_returns_data <- as.data.table(read.csv("hw3_returns2.csv"))
+Q3_returns_data[,Date:=mdy(Date)]
+
+rolling_win <- 20
+
+# find stddev, mean
+Q3_returns_data[, `:=`(volatility = shift(rollapply(Q3_returns_data$Return, rolling_win, sd ,fill=NA, align="right")), 
+                       mean = shift(rollapply(Q3_returns_data$Return, 
+                       rolling_win, mean ,fill=NA, align="right")))]
+
+# normalized return
+Q3_returns_data[,normalized:= (Return - mean)/volatility]
+
+sorted_ret <- sort(Q3_returns_data$normalized)
+
+n <- length(sorted_ret)
+
+sorted_ret_dt <- as.data.table(sorted_ret,col=1)
+sorted_ret_dt[, rank := 1]
+sorted_ret_dt[, rank := cumsum(rank)]
+
+sorted_ret_dt[, logrank := log(rank) ]
+sorted_ret_dt[, logret := log(abs(sorted_ret))]
+
+loss_dt <- sorted_ret_dt[1:(length(sorted_ret_dt$sorted_ret) * 0.05),]
+
+fit <- lm(logrank ~ logret, data=loss_dt)
+summary(fit)
+plot(x= loss_dt$logret, y= loss_dt$logrank, main="Normalized left tail distribution at 5%", xlab= "log return", ylab="log rank")
+abline(a= fit$coefficients[1], b=fit$coefficients[2])
+```
+
+Power law:
+
+$$Prob(X > x) = Kx^{-1/\xi}$$
+
+Taking log on both sides 
+
+$$log(Prob(X > x)) = log(K) - \frac{1}{\xi}log(x)$$
+In this case, the regression line fits the data pretty well, indicating a that the distribution follows the power law.
+
+Now, estimate the values of $\beta$ and $\xi$ using `optim` function
+
+```{r}
+sorted_ret <- sort(na.omit(Q3_returns_data$normalized))
+
+x <-abs(sorted_ret[1:(length(sorted_ret)*0.05)])
+
+u <- last(x)
+
+llike <- function(x, par, u){
+  xi <- par[1]
+  beta <- par[2]
+  n <- length(x)
+  ll <- sum(log((1/beta) * (1 + xi * (x - u) / beta) ^ ((-1/xi) - 1)))
+  return(-ll)
+}
+
+par <- c(0.1,0.1)
+gpd.estimate <- optim(par=par, llike, x = x , u = u)
+
+cat("estimates for xi and beta is: ", gpd.estimate$par)
+xi <- gpd.estimate$par[1]
+beta <- gpd.estimate$par[2]
+```
+
+Use the following formula to get VaR:
+
+$$VaR = u + \frac{\beta}{\xi}([\frac{n}{n_u}]^{-\xi} - 1)$$
+
+```{r}
+n <- length(sorted_ret)
+n_u <- n * 0.05
+c <- 0.01
+
+VaR <- u + (beta/xi) *( (n*c/n_u)^(-xi) -1)
+
+cat("For normalized return, the VaR on the last day is: ", VaR,"\n")
+```
+
+
+
+### 1.4
+
+```{r}
+data_2005_onwards <- Q3_returns_data[Date >= "2015-01-01"]
+
+except_normalized <- sum(data_2005_onwards[, normalized < (VaR * -1) ])
+
+cat("Using the VaR calculated from Pareto Distribution, the number of exceptions are: ", except_normalized,"\n")
+```
+
+There are 748 data entries from 2015 to 2017. By taking 99% VaR on these observation, we should be seeing (748 * 0.01 = 7.48) 8 exceptions. By using the pareto distribution, we obtained 7 observations. 
+
+In the previous HW3, i obtained 8 exceptions using historical and exponential weighting on normalized return. I would say that pareto distribution is also a good technique to estimate the VaR. 
+
+
+
+
+
+## Qn2
+
+### 1. What was the broad trading strategy of LTCM ?
+
+
+
+### 2. Why did they need so much leverage?
+
+### 3. How did their demise happen? 
+
+### 4. What were the most important issues with their risk management approach?
+
+### 5. How would you manage risk for a fund trying to trade similar strategies?
+
+
 
