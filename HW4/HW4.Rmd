@@ -88,7 +88,7 @@ GARCH(1,1) formula:
 
 $$\sigma^2_t = \gamma V_L + \alpha R^2_{t-1} + \beta \sigma^2_{t-1}$$ 
 
-where $w =  \gamma V_L $
+where $w =  \gamma V_L$
 
 It is EWMA + long-run average
 
@@ -179,7 +179,7 @@ $$Prob(X > x) = Kx^{-1/\xi}$$
 Taking log on both sides 
 
 $$log(Prob(X > x)) = log(K) - \frac{1}{\xi}log(x)$$
-In this case, the regression line fits the data pretty well, indicating a that the distribution follows the power law.
+In this case, the two coefficient are very significant and the regression line fits the data pretty well, indicating a strong linear relationship between log(prob) and log(loss). Hence it follows the power law.
 
 Now, estimate the values of $\beta$ and $\xi$ using `optim` function
 
@@ -222,6 +222,17 @@ cat("For normalized return, the VaR on the last day is: ", VaR,"\n")
 
 
 
+The VaR is shown below in the normalized gain distribution.
+
+
+
+```{r}
+hist(sorted_ret,xlab= "Normalized Gains", breaks = 50
+     ,col = "green", main="Normalized Gains")
+abline(v = VaR * -1, col="red")
+```
+
+
 ### 1.4
 
 ```{r}
@@ -232,9 +243,9 @@ except_normalized <- sum(data_2005_onwards[, normalized < (VaR * -1) ])
 cat("Using the VaR calculated from Pareto Distribution, the number of exceptions are: ", except_normalized,"\n")
 ```
 
-There are 748 data entries from 2015 to 2017. By taking 99% VaR on these observation, we should be seeing (748 * 0.01 = 7.48) 8 exceptions. By using the pareto distribution, we obtained 7 observations. 
+There are 748 data entries from 2015 to 2017. By taking 99% VaR on these observation, we should be seeing (748 * 0.01 = 7.48) 8 exceptions. By using the pareto distribution on the normalized return, we obtained 7 observations. 
 
-In the previous HW3, i obtained 8 exceptions using historical and exponential weighting on normalized return. I would say that pareto distribution is also a good technique to estimate the VaR. 
+In the previous HW3, Is obtained 8 exceptions using historical and exponential weighting on normalized return. I would say that pareto distribution is as a good technique to estimate the VaR as the techniques we used in HW3.
 
 
 
@@ -242,17 +253,47 @@ In the previous HW3, i obtained 8 exceptions using historical and exponential we
 
 ## Qn2
 
+For question 2, I teamed up with Mu Lin. 
+
 ### 1. What was the broad trading strategy of LTCM ?
+
+The LTCM was ran by former Solomon Brothers people who tried to replicate the similar bond arbitrage strategies and was structured to be a hedge fund, only open to large investors. As the term defined, LTCM is a hedge fund going both ways, long and short on positions which sometimes, may possess higher leverage and risk. 
+
+The main strategy LTCM embraces is to bet on difference in yields between short-term and long-term bonds to be flatten. Specifically, the firm would long in off-the-run treasuries with higher yield and short in on-the-run treasuries with slightly lower yield; two bonds eventually converge (same maturity). The difference in yields for those closely identical bonds is due to compensation for liquidity risk. Besides, the firm also took non-arbitrage positions such as shorting equity options, emerging market debt and catastrophic bonds. 
+
 
 
 
 ### 2. Why did they need so much leverage?
 
+Over a year, such trade that is long the off-the-run and short the on-the-run would be expected to return 10bp for every dollar invested. Hence, leverage is required to create attractive returns.
+
+In general, LTCM used the tools of portfolio optimisation to structure its portfolio, leverage it by a factor of 25 to take advantage of so-called "arbitrage" trades. Due to the nature of such bond arbitrage strategy, it is somehow inevitable to impose huge leverage in order for the firm to generate attractive returns. In portfolio construction, firm set the volatility as the unleveraged position in the U.S. equity market and optimized its position with constraint in volatility and some liquidity consideration. 
+
+
+
+
 ### 3. How did their demise happen? 
+
+The LTCM’s strategy can be interpreted in terms of a constrained optimization, i.e. maximizing expected returns subject to a constraint on VaR. This strategy led to the firm to its demise, as it created huge leverage and extreme sensitivity to instability in the correlations.
+
+Beginning in May 1998, a downturn in mortgage-back securities market resulted in 16% loss to the firm, and quickly when Russia announced its restructuring plan to its government bonds, the market started to reassess credit and sovereign risk, leading to a sharp jump in credit spread while stock market dived also. Since most of the firm’s assets are borrowed (due to leverage), such sudden loss on firm’s equity increased its leverage even drastically. When market continued to deteriorate, the firm was forced to liquidate much of its assets in order to meet margin calls from derivative positions and counterparties were, leaving no choice, but to liquidate the firm’s repo collaterals in the fear that the firm could not meet further margin calls. Among 90% of losses of capital, most of it comes from bets on interest rate swap and equity volatility (out-of-money options). 
+
+
+
 
 ### 4. What were the most important issues with their risk management approach?
 
+The usage of VaR as the risk measurement is heavily blamed for the failure of LTCM. As mentioned above, the firm structured its portfolio as to optimize return subject constraint in volatility and capital holdings. However, the firm assumes constant volatility as to the U.S. equity market and with its implementation of VaR in risk management, "tail risk” is gigantic, but ignored. And the fact has proven it right: when market continued to slide down and volatility spiked, tail risk became realized. Also it relied on a short time horizon to estimate the risk and assumed normal distribution on the return. Its daily VaR is set to be $409 million at 99% level in a month, however it went on a losing streak in starting from May 1997 and lost $4.4 billion during 1998. The risk measure assigned a low probability to events such as sovereignty defaults and major market disruptions, which led to huge loss when the rare events occurred.
+
+
+
+
 ### 5. How would you manage risk for a fund trying to trade similar strategies?
+
+One need to understand that such trading strategy tend to induce the fund to make undiversified and highly leveraged bets and hence is fundamentally more risky. Therefore, the fund should never underestimate the risks at the tail.
+
+A lesson to learn from the perspective of risk management, one should implement diverse measurement in risk and consider the “tail risk” to be significant when making investment decision. A time-varying GARCH model may perform better than constant normal distribution of volatility. And also one shall consider the use of expected shortfall to take into account of tail risk and tried to model the distribution of the “tail” (losses) in order to understand potential drawback. Taking a longer time horizon would also be useful to estimate a more accurate VaR by factoring in more rare events which caused huge loss in the past.
 
 
 
